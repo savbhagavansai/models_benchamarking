@@ -1,7 +1,6 @@
 package com.gesture.recognition
 
 import android.content.Context
-import android.util.Log
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.CompatibilityList
 import org.tensorflow.lite.gpu.GpuDelegate
@@ -9,155 +8,158 @@ import org.tensorflow.lite.nnapi.NnApiDelegate
 import java.nio.ByteBuffer
 
 /**
- * MINIMAL Benchmark with extensive logging to find crash point
+ * ULTRA-SAFE Benchmark - logs at every single step
  */
 class ModelBenchmark(private val context: Context) {
 
     companion object {
         private const val TAG = "ModelBenchmark"
-        private const val BENCHMARK_RUNS = 20  // Reduced for faster testing
+        private const val BENCHMARK_RUNS = 10  // Even fewer for faster testing
     }
 
-    data class ModelInfo(
-        val name: String,
-        val filename: String,
-        val inputShape: IntArray
-    )
-
     /**
-     * Run minimal benchmark with extensive logging
+     * Run minimal benchmark
      */
     fun runCompleteBenchmark(): String {
+        // LOG IMMEDIATELY - before anything else!
+        FileLogger.i(TAG, "========== BENCHMARK FUNCTION CALLED ==========")
+
         val report = StringBuilder()
 
         try {
-            FileLogger.i(TAG, "Step 1: Starting benchmark report...")
+            FileLogger.i(TAG, "Creating StringBuilder...")
             report.appendLine("════════════════════════════════════════════════════════")
+
+            FileLogger.i(TAG, "Adding title...")
             report.appendLine("         MODEL ACCELERATION BENCHMARK REPORT")
             report.appendLine("════════════════════════════════════════════════════════")
+
+            FileLogger.i(TAG, "Getting device info...")
             report.appendLine("Device: ${android.os.Build.MODEL}")
             report.appendLine("Android: ${android.os.Build.VERSION.SDK_INT}")
             report.appendLine()
 
-            // Define models
-            FileLogger.i(TAG, "Step 2: Defining models...")
-            val models = listOf(
-                ModelInfo("HandDetector", "mediapipe_hand-handdetector.tflite", intArrayOf(1, 256, 256, 3)),
-                ModelInfo("HandLandmark", "mediapipe_hand-handlandmarkdetector.tflite", intArrayOf(1, 256, 256, 3))
-            )
-            FileLogger.i(TAG, "Models defined: ${models.size} models")
-
-            // Test GPU device support
-            FileLogger.i(TAG, "Step 3: Checking GPU support...")
+            FileLogger.i(TAG, "Testing GPU compatibility...")
             report.appendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            report.appendLine("TEST 1: GPU DEVICE COMPATIBILITY")
+            report.appendLine("GPU COMPATIBILITY CHECK")
             report.appendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
             try {
                 val compatList = CompatibilityList()
                 val gpuSupported = compatList.isDelegateSupportedOnThisDevice
-                report.appendLine("GPU Delegate Supported: $gpuSupported")
-                FileLogger.i(TAG, "GPU support check complete: $gpuSupported")
+                report.appendLine("GPU Supported: $gpuSupported")
+                FileLogger.i(TAG, "GPU check OK: $gpuSupported")
             } catch (e: Exception) {
-                report.appendLine("GPU check failed: ${e.message}")
-                FileLogger.e(TAG, "GPU check error: ${e.message}", e)
+                report.appendLine("GPU check error: ${e.message}")
+                FileLogger.e(TAG, "GPU check failed", e)
             }
             report.appendLine()
 
-            // Benchmark each model
+            // Test HandDetector only (simplify)
+            FileLogger.i(TAG, "Starting HandDetector tests...")
             report.appendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            report.appendLine("TEST 2: PERFORMANCE BENCHMARK")
+            report.appendLine("HANDDETECTOR BENCHMARK")
             report.appendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-            for (modelInfo in models) {
-                FileLogger.i(TAG, "Testing model: ${modelInfo.name}")
-                report.appendLine("\n▼ ${modelInfo.name}")
-                report.appendLine("─".repeat(60))
-
-                // Test CPU
-                FileLogger.i(TAG, "${modelInfo.name}: Testing CPU...")
-                try {
-                    val cpuResult = benchmarkCPU(modelInfo)
-                    report.appendLine(cpuResult)
-                    FileLogger.i(TAG, "${modelInfo.name}: CPU test complete")
-                } catch (e: Exception) {
-                    report.appendLine("  CPU: ✗ FAILED - ${e.message}")
-                    FileLogger.e(TAG, "${modelInfo.name}: CPU failed: ${e.message}", e)
-                }
-
-                // Test GPU
-                FileLogger.i(TAG, "${modelInfo.name}: Testing GPU...")
-                try {
-                    val gpuResult = benchmarkGPU(modelInfo)
-                    report.appendLine(gpuResult)
-                    FileLogger.i(TAG, "${modelInfo.name}: GPU test complete")
-                } catch (e: Exception) {
-                    report.appendLine("  GPU: ✗ FAILED - ${e.message}")
-                    FileLogger.e(TAG, "${modelInfo.name}: GPU failed: ${e.message}", e)
-                }
-
-                // Test NPU
-                FileLogger.i(TAG, "${modelInfo.name}: Testing NPU...")
-                try {
-                    val npuResult = benchmarkNPU(modelInfo)
-                    report.appendLine(npuResult)
-                    FileLogger.i(TAG, "${modelInfo.name}: NPU test complete")
-                } catch (e: Exception) {
-                    report.appendLine("  NPU: ✗ FAILED - ${e.message}")
-                    FileLogger.e(TAG, "${modelInfo.name}: NPU failed: ${e.message}", e)
-                }
+            // Test CPU
+            FileLogger.i(TAG, "Testing CPU...")
+            try {
+                val cpuTime = testCPU()
+                report.appendLine("CPU: ${String.format("%.2f", cpuTime)}ms avg ✓")
+                FileLogger.i(TAG, "CPU test OK: ${cpuTime}ms")
+            } catch (e: Exception) {
+                report.appendLine("CPU: ✗ FAILED - ${e.message}")
+                FileLogger.e(TAG, "CPU test failed", e)
             }
 
-            report.appendLine("\n════════════════════════════════════════════════════════")
+            // Test GPU
+            FileLogger.i(TAG, "Testing GPU...")
+            try {
+                val gpuTime = testGPU()
+                report.appendLine("GPU: ${String.format("%.2f", gpuTime)}ms avg ✓")
+                FileLogger.i(TAG, "GPU test OK: ${gpuTime}ms")
+            } catch (e: Exception) {
+                report.appendLine("GPU: ✗ FAILED - ${e.message}")
+                FileLogger.e(TAG, "GPU test failed", e)
+            }
+
+            // Test NPU
+            FileLogger.i(TAG, "Testing NPU...")
+            try {
+                val npuTime = testNPU()
+                report.appendLine("NPU: ${String.format("%.2f", npuTime)}ms avg ✓")
+                FileLogger.i(TAG, "NPU test OK: ${npuTime}ms")
+            } catch (e: Exception) {
+                report.appendLine("NPU: ✗ FAILED - ${e.message}")
+                FileLogger.e(TAG, "NPU test failed", e)
+            }
+
+            report.appendLine()
+            report.appendLine("════════════════════════════════════════════════════════")
             report.appendLine("BENCHMARK COMPLETE!")
             report.appendLine("════════════════════════════════════════════════════════")
 
-            FileLogger.i(TAG, "Benchmark completed successfully!")
+            FileLogger.i(TAG, "========== BENCHMARK COMPLETED ==========")
 
         } catch (e: Exception) {
-            val error = "FATAL ERROR: ${e.message}\n\n${e.stackTraceToString()}"
+            val error = "CRASH: ${e.message}\n\n${e.stackTraceToString()}"
             report.appendLine(error)
-            FileLogger.e(TAG, "Fatal benchmark error: ${e.message}", e)
+            FileLogger.e(TAG, "FATAL ERROR in runCompleteBenchmark", e)
         }
 
         return report.toString()
     }
 
     /**
-     * Benchmark with CPU
+     * Test CPU performance
      */
-    private fun benchmarkCPU(modelInfo: ModelInfo): String {
+    private fun testCPU(): Float {
+        FileLogger.i(TAG, "CPU: Loading model...")
         var interpreter: Interpreter? = null
 
         try {
-            FileLogger.i(TAG, "CPU: Loading model ${modelInfo.filename}...")
-            val modelBuffer = loadModelFile(modelInfo.filename)
+            val modelBuffer = loadModelFile("mediapipe_hand-handdetector.tflite")
+            FileLogger.i(TAG, "CPU: Model loaded, creating interpreter...")
 
-            FileLogger.i(TAG, "CPU: Creating interpreter...")
             val options = Interpreter.Options().setNumThreads(4)
             interpreter = Interpreter(modelBuffer, options)
+            FileLogger.i(TAG, "CPU: Interpreter created")
 
-            FileLogger.i(TAG, "CPU: Creating dummy input...")
-            val input = createDummyInput(modelInfo.inputShape)
-
-            FileLogger.i(TAG, "CPU: Running warmup...")
-            repeat(3) {
-                interpreter.run(input, input) // Simple run
+            // Create input: [1, 256, 256, 3]
+            FileLogger.i(TAG, "CPU: Creating input tensor...")
+            val input = Array(1) {
+                Array(256) {
+                    Array(256) {
+                        FloatArray(3)
+                    }
+                }
             }
 
+            // Create outputs: boxes[1,2944,18] and scores[1,2944,1]
+            FileLogger.i(TAG, "CPU: Creating output tensors...")
+            val outputBoxes = Array(1) { Array(2944) { FloatArray(18) } }
+            val outputScores = Array(1) { Array(2944) { FloatArray(1) } }
+            val outputs = mapOf(0 to outputBoxes, 1 to outputScores)
+
+            // Warmup
+            FileLogger.i(TAG, "CPU: Running warmup...")
+            repeat(2) {
+                interpreter.runForMultipleInputsOutputs(arrayOf(input), outputs)
+            }
+
+            // Benchmark
             FileLogger.i(TAG, "CPU: Running benchmark...")
             val times = mutableListOf<Float>()
             repeat(BENCHMARK_RUNS) {
                 val start = System.nanoTime()
-                interpreter.run(input, input)
+                interpreter.runForMultipleInputsOutputs(arrayOf(input), outputs)
                 val elapsed = (System.nanoTime() - start) / 1_000_000f
                 times.add(elapsed)
             }
 
             val avg = times.average().toFloat()
-            FileLogger.i(TAG, "CPU: Benchmark complete - avg ${avg}ms")
-
-            return "  CPU: ${String.format("%.2f", avg)}ms avg ✓"
+            FileLogger.i(TAG, "CPU: Benchmark complete")
+            return avg
 
         } finally {
             interpreter?.close()
@@ -165,51 +167,63 @@ class ModelBenchmark(private val context: Context) {
     }
 
     /**
-     * Benchmark with GPU
+     * Test GPU performance
      */
-    private fun benchmarkGPU(modelInfo: ModelInfo): String {
+    private fun testGPU(): Float {
+        FileLogger.i(TAG, "GPU: Checking support...")
+        val compatList = CompatibilityList()
+        if (!compatList.isDelegateSupportedOnThisDevice) {
+            throw Exception("GPU not supported on device")
+        }
+
+        FileLogger.i(TAG, "GPU: Loading model...")
         var interpreter: Interpreter? = null
         var delegate: GpuDelegate? = null
 
         try {
-            FileLogger.i(TAG, "GPU: Checking compatibility...")
-            val compatList = CompatibilityList()
-            if (!compatList.isDelegateSupportedOnThisDevice) {
-                FileLogger.w(TAG, "GPU: Not supported on device")
-                return "  GPU: ✗ Not supported on this device"
-            }
+            val modelBuffer = loadModelFile("mediapipe_hand-handdetector.tflite")
+            FileLogger.i(TAG, "GPU: Model loaded, creating delegate...")
 
-            FileLogger.i(TAG, "GPU: Loading model ${modelInfo.filename}...")
-            val modelBuffer = loadModelFile(modelInfo.filename)
-
-            FileLogger.i(TAG, "GPU: Creating GPU delegate...")
             delegate = GpuDelegate()
+            FileLogger.i(TAG, "GPU: Delegate created, creating interpreter...")
 
-            FileLogger.i(TAG, "GPU: Creating interpreter with GPU delegate...")
             val options = Interpreter.Options().addDelegate(delegate)
             interpreter = Interpreter(modelBuffer, options)
+            FileLogger.i(TAG, "GPU: Interpreter created")
 
-            FileLogger.i(TAG, "GPU: Creating dummy input...")
-            val input = createDummyInput(modelInfo.inputShape)
-
-            FileLogger.i(TAG, "GPU: Running warmup...")
-            repeat(3) {
-                interpreter.run(input, input)
+            // Create input
+            FileLogger.i(TAG, "GPU: Creating tensors...")
+            val input = Array(1) {
+                Array(256) {
+                    Array(256) {
+                        FloatArray(3)
+                    }
+                }
             }
 
+            val outputBoxes = Array(1) { Array(2944) { FloatArray(18) } }
+            val outputScores = Array(1) { Array(2944) { FloatArray(1) } }
+            val outputs = mapOf(0 to outputBoxes, 1 to outputScores)
+
+            // Warmup
+            FileLogger.i(TAG, "GPU: Running warmup...")
+            repeat(2) {
+                interpreter.runForMultipleInputsOutputs(arrayOf(input), outputs)
+            }
+
+            // Benchmark
             FileLogger.i(TAG, "GPU: Running benchmark...")
             val times = mutableListOf<Float>()
             repeat(BENCHMARK_RUNS) {
                 val start = System.nanoTime()
-                interpreter.run(input, input)
+                interpreter.runForMultipleInputsOutputs(arrayOf(input), outputs)
                 val elapsed = (System.nanoTime() - start) / 1_000_000f
                 times.add(elapsed)
             }
 
             val avg = times.average().toFloat()
-            FileLogger.i(TAG, "GPU: Benchmark complete - avg ${avg}ms")
-
-            return "  GPU: ${String.format("%.2f", avg)}ms avg ✓"
+            FileLogger.i(TAG, "GPU: Benchmark complete")
+            return avg
 
         } finally {
             interpreter?.close()
@@ -218,44 +232,57 @@ class ModelBenchmark(private val context: Context) {
     }
 
     /**
-     * Benchmark with NPU (NNAPI)
+     * Test NPU performance
      */
-    private fun benchmarkNPU(modelInfo: ModelInfo): String {
+    private fun testNPU(): Float {
+        FileLogger.i(TAG, "NPU: Loading model...")
         var interpreter: Interpreter? = null
         var delegate: NnApiDelegate? = null
 
         try {
-            FileLogger.i(TAG, "NPU: Loading model ${modelInfo.filename}...")
-            val modelBuffer = loadModelFile(modelInfo.filename)
+            val modelBuffer = loadModelFile("mediapipe_hand-handdetector.tflite")
+            FileLogger.i(TAG, "NPU: Model loaded, creating delegate...")
 
-            FileLogger.i(TAG, "NPU: Creating NNAPI delegate...")
             delegate = NnApiDelegate()
+            FileLogger.i(TAG, "NPU: Delegate created, creating interpreter...")
 
-            FileLogger.i(TAG, "NPU: Creating interpreter with NNAPI delegate...")
             val options = Interpreter.Options().addDelegate(delegate)
             interpreter = Interpreter(modelBuffer, options)
+            FileLogger.i(TAG, "NPU: Interpreter created")
 
-            FileLogger.i(TAG, "NPU: Creating dummy input...")
-            val input = createDummyInput(modelInfo.inputShape)
-
-            FileLogger.i(TAG, "NPU: Running warmup...")
-            repeat(3) {
-                interpreter.run(input, input)
+            // Create input
+            FileLogger.i(TAG, "NPU: Creating tensors...")
+            val input = Array(1) {
+                Array(256) {
+                    Array(256) {
+                        FloatArray(3)
+                    }
+                }
             }
 
+            val outputBoxes = Array(1) { Array(2944) { FloatArray(18) } }
+            val outputScores = Array(1) { Array(2944) { FloatArray(1) } }
+            val outputs = mapOf(0 to outputBoxes, 1 to outputScores)
+
+            // Warmup
+            FileLogger.i(TAG, "NPU: Running warmup...")
+            repeat(2) {
+                interpreter.runForMultipleInputsOutputs(arrayOf(input), outputs)
+            }
+
+            // Benchmark
             FileLogger.i(TAG, "NPU: Running benchmark...")
             val times = mutableListOf<Float>()
             repeat(BENCHMARK_RUNS) {
                 val start = System.nanoTime()
-                interpreter.run(input, input)
+                interpreter.runForMultipleInputsOutputs(arrayOf(input), outputs)
                 val elapsed = (System.nanoTime() - start) / 1_000_000f
                 times.add(elapsed)
             }
 
             val avg = times.average().toFloat()
-            FileLogger.i(TAG, "NPU: Benchmark complete - avg ${avg}ms")
-
-            return "  NPU (NNAPI): ${String.format("%.2f", avg)}ms avg ✓"
+            FileLogger.i(TAG, "NPU: Benchmark complete")
+            return avg
 
         } finally {
             interpreter?.close()
@@ -264,38 +291,18 @@ class ModelBenchmark(private val context: Context) {
     }
 
     /**
-     * Load model file from assets
+     * Load model file
      */
     private fun loadModelFile(filename: String): ByteBuffer {
-        FileLogger.i(TAG, "Loading model file: $filename")
         val fileDescriptor = context.assets.openFd(filename)
         val inputStream = java.io.FileInputStream(fileDescriptor.fileDescriptor)
         val fileChannel = inputStream.channel
         val startOffset = fileDescriptor.startOffset
         val declaredLength = fileDescriptor.declaredLength
-        val buffer = fileChannel.map(
+        return fileChannel.map(
             java.nio.channels.FileChannel.MapMode.READ_ONLY,
             startOffset,
             declaredLength
         )
-        FileLogger.i(TAG, "Model file loaded: ${buffer.capacity() / 1024} KB")
-        return buffer
-    }
-
-    /**
-     * Create dummy input tensor
-     */
-    private fun createDummyInput(shape: IntArray): Any {
-        FileLogger.i(TAG, "Creating dummy input: shape=${shape.joinToString("x")}")
-        return when (shape.size) {
-            4 -> Array(shape[0]) {
-                Array(shape[1]) {
-                    Array(shape[2]) {
-                        FloatArray(shape[3])
-                    }
-                }
-            }
-            else -> FloatArray(shape.reduce { acc, i -> acc * i })
-        }
     }
 }
