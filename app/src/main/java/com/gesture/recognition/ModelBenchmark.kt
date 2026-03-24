@@ -191,7 +191,8 @@ class ModelBenchmark(private val context: Context) {
                     if (!compatList.isDelegateSupportedOnThisDevice) {
                         throw Exception("GPU not supported on this device")
                     }
-                    val gpuDelegate = GpuDelegate(compatList.bestOptionsForThisDevice)
+                    // Use default GPU options
+                    val gpuDelegate = GpuDelegate()
                     options.addDelegate(gpuDelegate)
                     delegate = gpuDelegate
                 }
@@ -303,7 +304,8 @@ class ModelBenchmark(private val context: Context) {
                             if (!compatList.isDelegateSupportedOnThisDevice) {
                                 throw Exception("GPU not supported")
                             }
-                            val gpu = GpuDelegate(compatList.bestOptionsForThisDevice)
+                            // Use default GPU options
+                            val gpu = GpuDelegate()
                             options.addDelegate(gpu)
                             gpu
                         }
