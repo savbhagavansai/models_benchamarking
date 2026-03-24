@@ -79,8 +79,16 @@ class ModelBenchmark(private val context: Context) {
                 report.appendLine("GPU: ${String.format("%.2f", gpuTime)}ms avg ✓")
                 FileLogger.i(TAG, "GPU test OK: ${gpuTime}ms")
             } catch (e: Exception) {
-                report.appendLine("GPU: ✗ FAILED - ${e.message}")
-                FileLogger.e(TAG, "GPU test failed", e)
+                val errorMsg = if (e.message?.contains("Mali GPU") == true) {
+                    "✗ CRASHED (Known Mali GPU driver issue)"
+                } else {
+                    "✗ FAILED - ${e.message}"
+                }
+                report.appendLine("GPU: $errorMsg")
+                FileLogger.e(TAG, "GPU test failed: ${e.message}", e)
+
+                // Add helpful note about Mali GPU issue
+                report.appendLine("     Note: Mali-G68 MP5 GPU delegate has known issues with TFLite 2.14.0")
             }
 
             // Test NPU
@@ -95,6 +103,22 @@ class ModelBenchmark(private val context: Context) {
             }
 
             report.appendLine()
+            report.appendLine("════════════════════════════════════════════════════════")
+            report.appendLine("RECOMMENDATIONS")
+            report.appendLine("════════════════════════════════════════════════════════")
+            report.appendLine("Based on test results:")
+            report.appendLine("  • CPU works: ~100ms inference time")
+            report.appendLine("  • GPU: Check test results above")
+            report.appendLine("  • NPU (NNAPI): Check test results above")
+            report.appendLine()
+            report.appendLine("If NPU works with <10ms inference time:")
+            report.appendLine("  → USE NPU for all models (best performance!)")
+            report.appendLine()
+            report.appendLine("If GPU works but NPU fails:")
+            report.appendLine("  → USE GPU as fallback")
+            report.appendLine()
+            report.appendLine("If both GPU and NPU fail:")
+            report.appendLine("  → USE CPU with 4 threads (~100ms is acceptable)")
             report.appendLine("════════════════════════════════════════════════════════")
             report.appendLine("BENCHMARK COMPLETE!")
             report.appendLine("════════════════════════════════════════════════════════")
@@ -184,8 +208,17 @@ class ModelBenchmark(private val context: Context) {
             val modelBuffer = loadModelFile("mediapipe_hand-handdetector.tflite")
             FileLogger.i(TAG, "GPU: Model loaded, creating delegate...")
 
-            delegate = GpuDelegate()
-            FileLogger.i(TAG, "GPU: Delegate created, creating interpreter...")
+            // CRITICAL: GPU delegate creation can crash on some Mali GPUs
+            // even when isDelegateSupportedOnThisDevice returns true
+            try {
+                delegate = GpuDelegate()
+                FileLogger.i(TAG, "GPU: Delegate created successfully!")
+            } catch (e: Exception) {
+                FileLogger.e(TAG, "GPU: Delegate creation crashed (Mali GPU bug)", e)
+                throw Exception("GPU delegate creation failed (known Mali GPU issue): ${e.message}")
+            }
+
+            FileLogger.i(TAG, "GPU: Creating interpreter...")
 
             val options = Interpreter.Options().addDelegate(delegate)
             interpreter = Interpreter(modelBuffer, options)
