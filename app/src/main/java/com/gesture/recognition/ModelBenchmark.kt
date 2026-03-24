@@ -16,7 +16,6 @@ import java.nio.ByteBuffer
  * 2. Model compatibility with each delegate
  * 3. Concurrent model loading limits
  * 4. Memory usage
- * 5. Actual backend verification
  */
 class ModelBenchmark(private val context: Context) {
 
@@ -75,11 +74,11 @@ class ModelBenchmark(private val context: Context) {
             )
         )
 
-        // Test 1: Check GPU compatibility
+        // Test 1: Check GPU device support
         report.appendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        report.appendLine("TEST 1: GPU COMPATIBILITY CHECK")
+        report.appendLine("TEST 1: GPU DEVICE COMPATIBILITY CHECK")
         report.appendLine("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        val gpuCompatResults = checkGpuCompatibility(models)
+        val gpuCompatResults = checkGpuDeviceSupport(models)
         report.appendLine(gpuCompatResults)
 
         // Test 2: Benchmark each model with each delegate
@@ -89,22 +88,22 @@ class ModelBenchmark(private val context: Context) {
 
         val benchmarkResults = mutableListOf<BenchmarkResult>()
 
-        for (model in models) {
-            report.appendLine("\n▼ ${model.name} (${model.filename})")
+        for (modelInfo in models) {
+            report.appendLine("\n▼ ${modelInfo.name} (${modelInfo.filename})")
             report.appendLine("─".repeat(60))
 
             // Test CPU
-            val cpuResult = benchmarkModel(model, DelegateType.CPU)
+            val cpuResult = benchmarkModel(modelInfo, DelegateType.CPU)
             benchmarkResults.add(cpuResult)
             report.appendLine(formatResult(cpuResult))
 
             // Test GPU
-            val gpuResult = benchmarkModel(model, DelegateType.GPU)
+            val gpuResult = benchmarkModel(modelInfo, DelegateType.GPU)
             benchmarkResults.add(gpuResult)
             report.appendLine(formatResult(gpuResult))
 
             // Test NPU (NNAPI)
-            val npuResult = benchmarkModel(model, DelegateType.NNAPI)
+            val npuResult = benchmarkModel(modelInfo, DelegateType.NNAPI)
             benchmarkResults.add(npuResult)
             report.appendLine(formatResult(npuResult))
 
@@ -146,33 +145,24 @@ class ModelBenchmark(private val context: Context) {
     }
 
     /**
-     * Check GPU compatibility for each model
+     * Check GPU device support
      */
-    private fun checkGpuCompatibility(models: List<ModelInfo>): String {
+    private fun checkGpuDeviceSupport(models: List<ModelInfo>): String {
         val report = StringBuilder()
         val compatList = CompatibilityList()
 
         report.appendLine("GPU Device Support: ${compatList.isDelegateSupportedOnThisDevice}")
         report.appendLine()
 
-        for (model in models) {
-            try {
-                val modelBuffer = loadModelFile(model.filename)
-                val isCompatible = compatList.isModelCompatible(modelBuffer)
-
-                report.appendLine("${model.name}:")
-                report.appendLine("  File: ${model.filename}")
-                report.appendLine("  GPU Compatible: ${if (isCompatible) "✓ YES" else "✗ NO"}")
-
-                if (!isCompatible) {
-                    report.appendLine("  Reason: Model contains unsupported operations for Mali GPU")
-                }
-                report.appendLine()
-            } catch (e: Exception) {
-                report.appendLine("${model.name}: ✗ Error checking - ${e.message}")
-                report.appendLine()
-            }
+        // Try to get GPU info
+        if (compatList.isDelegateSupportedOnThisDevice) {
+            report.appendLine("GPU delegate is available on this device")
+            report.appendLine("Note: Individual model compatibility will be tested during benchmarking")
+        } else {
+            report.appendLine("GPU delegate is NOT available on this device")
+            report.appendLine("GPU benchmarks will fail")
         }
+        report.appendLine()
 
         return report.toString()
     }
@@ -180,14 +170,14 @@ class ModelBenchmark(private val context: Context) {
     /**
      * Benchmark a single model with a specific delegate
      */
-    private fun benchmarkModel(model: ModelInfo, delegateType: DelegateType): BenchmarkResult {
+    private fun benchmarkModel(modelInfo: ModelInfo, delegateType: DelegateType): BenchmarkResult {
         var interpreter: Interpreter? = null
         var delegate: AutoCloseable? = null
 
         try {
             // Load model
             val loadStart = System.nanoTime()
-            val modelBuffer = loadModelFile(model.filename)
+            val modelBuffer = loadModelFile(modelInfo.filename)
 
             // Create interpreter with delegate
             val options = Interpreter.Options()
@@ -197,7 +187,11 @@ class ModelBenchmark(private val context: Context) {
                     options.setNumThreads(4)
                 }
                 DelegateType.GPU -> {
-                    val gpuDelegate = GpuDelegate()
+                    val compatList = CompatibilityList()
+                    if (!compatList.isDelegateSupportedOnThisDevice) {
+                        throw Exception("GPU not supported on this device")
+                    }
+                    val gpuDelegate = GpuDelegate(compatList.bestOptionsForThisDevice)
                     options.addDelegate(gpuDelegate)
                     delegate = gpuDelegate
                 }
@@ -215,18 +209,18 @@ class ModelBenchmark(private val context: Context) {
             val actualBackend = verifyBackend(interpreter, delegateType)
 
             // Create dummy input
-            val input = createDummyInput(model.inputShape)
+            val input = createDummyInput(modelInfo.inputShape)
 
             // Warmup
             repeat(WARMUP_RUNS) {
-                runInference(interpreter, input, model.outputShapes)
+                runInference(interpreter, input, modelInfo.outputShapes)
             }
 
             // Benchmark
             val times = mutableListOf<Float>()
             repeat(BENCHMARK_RUNS) {
                 val start = System.nanoTime()
-                runInference(interpreter, input, model.outputShapes)
+                runInference(interpreter, input, modelInfo.outputShapes)
                 val elapsed = (System.nanoTime() - start) / 1_000_000f
                 times.add(elapsed)
             }
@@ -239,7 +233,7 @@ class ModelBenchmark(private val context: Context) {
             val stdDev = kotlin.math.sqrt(variance).toFloat()
 
             return BenchmarkResult(
-                modelName = model.name,
+                modelName = modelInfo.name,
                 delegateType = delegateType.name,
                 isSupported = true,
                 loadTimeMs = loadTime,
@@ -251,10 +245,10 @@ class ModelBenchmark(private val context: Context) {
             )
 
         } catch (e: Exception) {
-            Log.e(TAG, "Benchmark failed for ${model.name} with ${delegateType.name}: ${e.message}", e)
+            Log.e(TAG, "Benchmark failed for ${modelInfo.name} with ${delegateType.name}: ${e.message}", e)
 
             return BenchmarkResult(
-                modelName = model.name,
+                modelName = modelInfo.name,
                 delegateType = delegateType.name,
                 isSupported = false,
                 loadTimeMs = 0f,
@@ -298,14 +292,18 @@ class ModelBenchmark(private val context: Context) {
 
         try {
             // Try loading all models
-            for (model in models) {
+            for (modelInfo in models) {
                 try {
-                    val modelBuffer = loadModelFile(model.filename)
+                    val modelBuffer = loadModelFile(modelInfo.filename)
                     val options = Interpreter.Options()
 
                     val delegate = when (delegateType) {
                         DelegateType.GPU -> {
-                            val gpu = GpuDelegate()
+                            val compatList = CompatibilityList()
+                            if (!compatList.isDelegateSupportedOnThisDevice) {
+                                throw Exception("GPU not supported")
+                            }
+                            val gpu = GpuDelegate(compatList.bestOptionsForThisDevice)
                             options.addDelegate(gpu)
                             gpu
                         }
@@ -320,10 +318,10 @@ class ModelBenchmark(private val context: Context) {
                     val interpreter = Interpreter(modelBuffer, options)
                     interpreters.add(Pair(interpreter, delegate))
 
-                    report.appendLine("✓ ${model.name} loaded successfully (${interpreters.size} models total)")
+                    report.appendLine("✓ ${modelInfo.name} loaded successfully (${interpreters.size} models total)")
 
                 } catch (e: Exception) {
-                    report.appendLine("✗ ${model.name} FAILED: ${e.message}")
+                    report.appendLine("✗ ${modelInfo.name} FAILED: ${e.message}")
                     report.appendLine("  Limit reached at ${interpreters.size} models")
                     break
                 }
@@ -338,12 +336,12 @@ class ModelBenchmark(private val context: Context) {
                 var allWorking = true
                 interpreters.forEachIndexed { index, (interpreter, _) ->
                     try {
-                        val model = models[index]
-                        val input = createDummyInput(model.inputShape)
-                        runInference(interpreter, input, model.outputShapes)
-                        report.appendLine("  ✓ Model ${index + 1} (${model.name}) inference OK")
+                        val currentModel = models[index]
+                        val input = createDummyInput(currentModel.inputShape)
+                        runInference(interpreter, input, currentModel.outputShapes)
+                        report.appendLine("  ✓ Model ${index + 1} (${currentModel.name}) inference OK")
                     } catch (e: Exception) {
-                        report.appendLine("  ✗ Model ${index + 1} (${model.name}) inference FAILED: ${e.message}")
+                        report.appendLine("  ✗ Model ${index + 1} (${models[index].name}) inference FAILED: ${e.message}")
                         allWorking = false
                     }
                 }
@@ -376,20 +374,20 @@ class ModelBenchmark(private val context: Context) {
         report.appendLine()
 
         var totalSize = 0L
-        for (model in models) {
+        for (modelInfo in models) {
             try {
-                val modelBuffer = loadModelFile(model.filename)
+                val modelBuffer = loadModelFile(modelInfo.filename)
                 val sizeKB = modelBuffer.capacity() / 1024
                 val sizeMB = sizeKB / 1024f
                 totalSize += modelBuffer.capacity()
 
-                report.appendLine("${model.name}:")
-                report.appendLine("  File: ${model.filename}")
+                report.appendLine("${modelInfo.name}:")
+                report.appendLine("  File: ${modelInfo.filename}")
                 report.appendLine("  Size: ${String.format("%.2f", sizeMB)}MB (${sizeKB}KB)")
                 report.appendLine()
 
             } catch (e: Exception) {
-                report.appendLine("${model.name}: Error - ${e.message}")
+                report.appendLine("${modelInfo.name}: Error - ${e.message}")
                 report.appendLine()
             }
         }
