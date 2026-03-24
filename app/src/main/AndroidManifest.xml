@@ -2,10 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Camera permission -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-feature android:name="android.hardware.camera" android:required="true" />
-    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <!-- No camera permission needed - benchmark only! -->
 
     <application
         android:allowBackup="true"
@@ -15,6 +12,7 @@
         tools:targetApi="31"
         tools:ignore="MissingApplicationIcon">
 
+        <!-- Main Activity - Auto-launches benchmark -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -25,7 +23,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Benchmark Activity for testing NPU/GPU performance -->
+        <!-- Benchmark Activity - Shows results -->
         <activity
             android:name=".BenchmarkActivity"
             android:exported="false"
