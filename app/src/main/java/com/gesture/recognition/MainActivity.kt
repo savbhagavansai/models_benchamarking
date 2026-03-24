@@ -12,8 +12,8 @@ class MainActivity : AppCompatActivity() {
         FileLogger.init(this)
         FileLogger.i("MainActivity", "=== APP STARTED ===")
 
-        // TEMPORARY: Launch TestActivity instead of BenchmarkActivity
-        startActivity(Intent(this, TestActivity::class.java))
+        // Switch back to BenchmarkActivity
+        startActivity(Intent(this, BenchmarkActivity::class.java))
 
         finish()
     }
