@@ -39,12 +39,3 @@
     </application>
 
 </manifest>
-```
-
----
-
-## 📋 USAGE:
-
-**Copy this ENTIRE file** to:
-```
-app/src/main/AndroidManifest.xml
