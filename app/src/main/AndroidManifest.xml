@@ -2,40 +2,43 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- No camera permission needed - benchmark only! -->
-
     <application
         android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.AppCompat.Light.NoActionBar"
-        tools:targetApi="31"
-        tools:ignore="MissingApplicationIcon">
+        android:theme="@style/Theme.AppCompat"
+        tools:targetApi="31">
 
-        <!-- Main Activity - Auto-launches test/benchmark -->
+        <!-- ════════════════════════════════════════════════════════ -->
+        <!-- MAIN ACTIVITY - App entry point (LAUNCHER)              -->
+        <!-- ════════════════════════════════════════════════════════ -->
         <activity
             android:name=".MainActivity"
-            android:exported="true"
-            android:screenOrientation="portrait">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- Test Activity - Diagnostic checks -->
-        <activity
-            android:name=".TestActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"
-            android:label="Model Test" />
-
-        <!-- Benchmark Activity - Shows results -->
+        <!-- ════════════════════════════════════════════════════════ -->
+        <!-- BENCHMARK ACTIVITY - CRITICAL: MUST BE DECLARED!        -->
+        <!-- Without this declaration, app will crash immediately!   -->
+        <!-- ════════════════════════════════════════════════════════ -->
         <activity
             android:name=".BenchmarkActivity"
             android:exported="false"
-            android:screenOrientation="portrait"
-            android:label="Model Benchmark" />
+            android:screenOrientation="portrait" />
+
+        <!-- ════════════════════════════════════════════════════════ -->
+        <!-- TEST ACTIVITY (if you have this file)                   -->
+        <!-- ════════════════════════════════════════════════════════ -->
+        <activity
+            android:name=".TestActivity"
+            android:exported="false" />
+
     </application>
 
 </manifest>
