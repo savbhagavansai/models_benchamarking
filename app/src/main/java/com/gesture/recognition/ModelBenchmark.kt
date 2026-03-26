@@ -103,6 +103,15 @@ class ModelBenchmark(private val context: Context) {
         return report.toString()
     }
 
+    /**
+     * COMPATIBILITY WRAPPER
+     * Maintains compatibility with existing BenchmarkActivity.kt
+     * that calls runCompleteBenchmark()
+     */
+    fun runCompleteBenchmark(): String {
+        return runComprehensiveBenchmark()
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // DEVICE INFORMATION
     // ═══════════════════════════════════════════════════════════════
