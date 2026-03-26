@@ -12,10 +12,9 @@ import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 
 /**
- * Model Benchmark - Tests CPU, GPU (FORCED), and NPU performance
+ * CRASH-SAFE Model Benchmark with extensive error handling
  *
- * This version FORCES GPU delegate creation by BYPASSING the CompatibilityList check
- * which may incorrectly report "not supported" on capable Qualcomm Adreno devices.
+ * This version has multiple safety checks to prevent crashes
  */
 class ModelBenchmark(private val context: Context) {
 
@@ -23,8 +22,8 @@ class ModelBenchmark(private val context: Context) {
         private const val TAG = "ModelBenchmark"
         private const val MODEL_FILE = "mediapipe_hand-handdetector.tflite"
         private const val INPUT_SIZE = 192
-        private const val WARMUP_RUNS = 5
-        private const val BENCHMARK_RUNS = 50
+        private const val WARMUP_RUNS = 3  // Reduced to avoid crashes
+        private const val BENCHMARK_RUNS = 20  // Reduced to avoid crashes
     }
 
     private var interpreter: Interpreter? = null
@@ -34,255 +33,335 @@ class ModelBenchmark(private val context: Context) {
     private val input = Array(1) { Array(INPUT_SIZE) { Array(INPUT_SIZE) { FloatArray(3) } } }
     private val output = Array(1) { FloatArray(1) }
 
-    private lateinit var modelBuffer: MappedByteBuffer
+    private var modelBuffer: MappedByteBuffer? = null
 
     // ═══════════════════════════════════════════════════════════════
-    // PUBLIC API - COMPREHENSIVE BENCHMARK
+    // PUBLIC API - CRASH-SAFE BENCHMARK
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Run comprehensive benchmark testing CPU, GPU (forced), and NPU
-     * Returns formatted report string
+     * Run comprehensive benchmark - CRASH SAFE VERSION
      */
     fun runComprehensiveBenchmark(): String {
+        log("═══════════════════════════════════════")
+        log("Starting CRASH-SAFE benchmark...")
+        log("═══════════════════════════════════════")
+
         val report = StringBuilder()
 
-        report.appendLine("════════════════════════════════════════════════════════")
-        report.appendLine("COMPREHENSIVE MODEL ACCELERATION BENCHMARK")
-        report.appendLine("════════════════════════════════════════════════════════")
-        report.appendLine()
+        try {
+            report.appendLine("════════════════════════════════════════════════════════")
+            report.appendLine("COMPREHENSIVE MODEL ACCELERATION BENCHMARK")
+            report.appendLine("(CRASH-SAFE VERSION)")
+            report.appendLine("════════════════════════════════════════════════════════")
+            report.appendLine()
 
-        // Device information
-        appendDeviceInfo(report)
+            // Device information
+            appendDeviceInfo(report)
 
-        // Load model
-        modelBuffer = loadModelFile()
+            // Load model with safety checks
+            report.appendLine("════════════════════════════════════════════════════════")
+            report.appendLine("STEP 1: MODEL LOADING")
+            report.appendLine("════════════════════════════════════════════════════════")
+            report.appendLine()
 
-        // GPU compatibility check
-        report.appendLine("════════════════════════════════════════════════════════")
-        report.appendLine("STEP 1: GPU COMPATIBILITY CHECK")
-        report.appendLine("════════════════════════════════════════════════════════")
-        report.appendLine()
+            val loadSuccess = safeLoadModel(report)
+            if (!loadSuccess) {
+                report.appendLine()
+                report.appendLine("✗ MODEL LOADING FAILED - Cannot continue benchmark")
+                report.appendLine("════════════════════════════════════════════════════════")
+                return report.toString()
+            }
 
-        val gpuSupported = checkGPUCompatibilityList()
-        report.appendLine("GPU Delegate Support: ${if (gpuSupported) "YES ✓" else "NO ✗"}")
-        report.appendLine()
+            report.appendLine()
 
-        if (!gpuSupported) {
-            report.appendLine("The device reports GPU delegate is NOT supported.")
-            report.appendLine("GPU benchmark will BYPASS this check and try anyway.")
+            // GPU compatibility check
+            report.appendLine("════════════════════════════════════════════════════════")
+            report.appendLine("STEP 2: GPU COMPATIBILITY CHECK")
+            report.appendLine("════════════════════════════════════════════════════════")
+            report.appendLine()
+
+            val gpuSupported = safeCheckGPU(report)
+            report.appendLine()
+
+            // Performance benchmarks
+            report.appendLine("════════════════════════════════════════════════════════")
+            report.appendLine("STEP 3: PERFORMANCE BENCHMARK")
+            report.appendLine("════════════════════════════════════════════════════════")
+            report.appendLine()
+
+            val results = mutableMapOf<String, BenchmarkResult>()
+
+            // Test all backends with safety
+            report.appendLine("Testing CPU...")
+            results["CPU"] = safeBenchmarkCPU(report)
+            report.appendLine()
+
+            report.appendLine("Testing GPU...")
+            results["GPU"] = safeBenchmarkGPU(report)
+            report.appendLine()
+
+            report.appendLine("Testing NPU...")
+            results["NPU"] = safeBenchmarkNPU(report)
+            report.appendLine()
+
+            // Print results
+            printResults(report, results)
+
+            // Recommendations
+            printRecommendations(report, results)
+
+            // Summary
+            printSummary(report, results)
+
+            report.appendLine("════════════════════════════════════════════════════════")
+            report.appendLine("BENCHMARK COMPLETE!")
+            report.appendLine("════════════════════════════════════════════════════════")
+
+        } catch (e: Exception) {
+            report.appendLine()
+            report.appendLine("════════════════════════════════════════════════════════")
+            report.appendLine("CRITICAL ERROR - BENCHMARK CRASHED")
+            report.appendLine("════════════════════════════════════════════════════════")
+            report.appendLine("Error: ${e.message}")
+            report.appendLine("Stack trace:")
+            report.appendLine(e.stackTraceToString())
+            log("CRITICAL ERROR: ${e.message}")
+            log(e.stackTraceToString())
         }
-        report.appendLine()
-
-        // Performance benchmarks
-        report.appendLine("════════════════════════════════════════════════════════")
-        report.appendLine("STEP 2: PERFORMANCE BENCHMARK (HandDetector Model)")
-        report.appendLine("════════════════════════════════════════════════════════")
-        report.appendLine()
-
-        val results = mutableMapOf<String, BenchmarkResult>()
-
-        // Test all backends
-        results["CPU"] = benchmarkCPU()
-        results["GPU"] = benchmarkGPU()
-        results["NPU"] = benchmarkNPU()
-
-        // Print results
-        printResults(report, results)
-
-        // Recommendations
-        printRecommendations(report, results)
-
-        // Summary
-        printSummary(report, results)
-
-        report.appendLine("════════════════════════════════════════════════════════")
-        report.appendLine("BENCHMARK COMPLETE!")
-        report.appendLine("════════════════════════════════════════════════════════")
 
         return report.toString()
     }
 
     /**
      * COMPATIBILITY WRAPPER
-     * Maintains compatibility with existing BenchmarkActivity.kt
-     * that calls runCompleteBenchmark()
      */
     fun runCompleteBenchmark(): String {
         return runComprehensiveBenchmark()
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // DEVICE INFORMATION
+    // SAFE MODEL LOADING
     // ═══════════════════════════════════════════════════════════════
 
-    private fun appendDeviceInfo(report: StringBuilder) {
-        report.appendLine("DEVICE INFORMATION:")
-        report.appendLine("  Manufacturer: ${Build.MANUFACTURER}")
-        report.appendLine("  Model: ${Build.MODEL}")
-        report.appendLine("  Hardware: ${Build.HARDWARE}")
-        report.appendLine("  Android Version: ${Build.VERSION.SDK_INT}")
-
-        val gpuInfo = detectGPU()
-        report.appendLine("  GPU: $gpuInfo")
-        report.appendLine()
-
-        // Device type detection
-        val isQualcomm = Build.HARDWARE.contains("qcom", ignoreCase = true) ||
-                         Build.HARDWARE.contains("qualcomm", ignoreCase = true)
-
-        if (isQualcomm) {
-            report.appendLine("✓ Qualcomm Snapdragon detected")
-            report.appendLine("  Expected: Excellent GPU/NPU support")
-        } else {
-            report.appendLine("⚠ Non-Qualcomm device")
-            report.appendLine("  Expected: Limited acceleration")
-        }
-        report.appendLine()
-    }
-
-    private fun detectGPU(): String {
+    private fun safeLoadModel(report: StringBuilder): Boolean {
         return try {
-            when {
-                Build.HARDWARE.contains("qcom", ignoreCase = true) ->
-                    "Qualcomm Adreno"
-                Build.HARDWARE.contains("exynos", ignoreCase = true) ->
-                    "ARM Mali (Exynos)"
-                Build.HARDWARE.contains("kirin", ignoreCase = true) ->
-                    "ARM Mali (Kirin)"
-                else ->
-                    "Unknown"
+            log("Attempting to load model: $MODEL_FILE")
+            report.appendLine("Loading model: $MODEL_FILE")
+
+            // Check if file exists
+            val assetList = context.assets.list("") ?: emptyArray()
+            log("Assets found: ${assetList.joinToString(", ")}")
+
+            if (!assetList.contains(MODEL_FILE)) {
+                log("ERROR: Model file not found in assets!")
+                report.appendLine("✗ ERROR: Model file '$MODEL_FILE' not found in assets folder")
+                report.appendLine()
+                report.appendLine("Available files in assets:")
+                assetList.forEach { report.appendLine("  - $it") }
+                return false
             }
+
+            // Load model
+            val assetFileDescriptor = context.assets.openFd(MODEL_FILE)
+            val fileInputStream = FileInputStream(assetFileDescriptor.fileDescriptor)
+            val fileChannel = fileInputStream.channel
+            val startOffset = assetFileDescriptor.startOffset
+            val declaredLength = assetFileDescriptor.declaredLength
+
+            modelBuffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
+
+            val sizeKB = declaredLength / 1024
+            log("Model loaded successfully: ${sizeKB}KB")
+            report.appendLine("✓ Model loaded successfully")
+            report.appendLine("  Size: ${sizeKB}KB")
+
+            true
+
         } catch (e: Exception) {
-            "Unknown"
+            log("ERROR loading model: ${e.message}")
+            log(e.stackTraceToString())
+
+            report.appendLine("✗ ERROR loading model: ${e.message}")
+            report.appendLine()
+            report.appendLine("Stack trace:")
+            report.appendLine(e.stackTraceToString())
+
+            false
         }
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // BENCHMARK IMPLEMENTATIONS
+    // SAFE GPU CHECK
     // ═══════════════════════════════════════════════════════════════
 
-    private fun benchmarkCPU(): BenchmarkResult {
+    private fun safeCheckGPU(report: StringBuilder): Boolean {
+        return try {
+            log("Checking GPU compatibility...")
+
+            val compatList = org.tensorflow.lite.gpu.CompatibilityList()
+            val isSupported = compatList.isDelegateSupportedOnThisDevice
+
+            report.appendLine("GPU Delegate Support (CompatibilityList): ${if (isSupported) "YES ✓" else "NO ✗"}")
+
+            if (!isSupported) {
+                report.appendLine()
+                report.appendLine("Note: CompatibilityList reports 'not supported'")
+                report.appendLine("      This may be a false negative on capable devices")
+                report.appendLine("      GPU benchmark will try anyway...")
+            }
+
+            isSupported
+
+        } catch (e: Exception) {
+            log("ERROR checking GPU: ${e.message}")
+            report.appendLine("GPU Delegate Support: Unknown (error checking)")
+            report.appendLine("Error: ${e.message}")
+            false
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // SAFE BENCHMARK IMPLEMENTATIONS
+    // ═══════════════════════════════════════════════════════════════
+
+    private fun safeBenchmarkCPU(report: StringBuilder): BenchmarkResult {
         log("━━━ Benchmarking CPU ━━━")
 
         return try {
+            if (modelBuffer == null) {
+                throw Exception("Model not loaded")
+            }
+
+            log("Creating CPU interpreter...")
             val options = Interpreter.Options()
             options.setNumThreads(4)
-            options.setUseXNNPACK(true)  // ARM NEON optimization
+            options.setUseXNNPACK(true)
 
-            interpreter = Interpreter(modelBuffer, options)
-
+            interpreter = Interpreter(modelBuffer!!, options)
             log("CPU interpreter created")
 
-            val avgTime = runBenchmark()
-
-            log("✓ CPU: ${String.format("%.2f", avgTime)}ms avg")
+            val avgTime = safeRunBenchmark()
+            log("CPU benchmark complete: ${avgTime}ms")
 
             BenchmarkResult(
                 avgTime = avgTime,
                 status = Status.WORKING,
                 statusMessage = "WORKING",
-                threads = "4",
+                threads = "4 threads (XNNPack)",
                 note = ""
             )
 
         } catch (e: Exception) {
-            log("✗ CPU failed: ${e.message}")
+            log("CPU benchmark failed: ${e.message}")
+            log(e.stackTraceToString())
+
             BenchmarkResult(
                 avgTime = 0f,
                 status = Status.FAILED,
-                statusMessage = e.message ?: "Unknown error",
+                statusMessage = "FAILED: ${e.message}",
                 threads = "",
-                note = ""
+                note = e.stackTraceToString()
             )
         } finally {
-            cleanup()
+            safeCleanup()
         }
     }
 
-    private fun benchmarkGPU(): BenchmarkResult {
-        log("━━━ Benchmarking GPU (FORCED - bypassing whitelist) ━━━")
+    private fun safeBenchmarkGPU(report: StringBuilder): BenchmarkResult {
+        log("━━━ Benchmarking GPU (FORCED) ━━━")
 
         return try {
-            // CRITICAL: FORCE GPU DELEGATE - BYPASS COMPATIBILITY CHECK
-            log("Creating GPU delegate WITHOUT checking CompatibilityList...")
-            log("This bypasses the false negative on Qualcomm devices")
+            if (modelBuffer == null) {
+                throw Exception("Model not loaded")
+            }
 
-            val gpuDelegate = GpuDelegate()
+            log("Creating GPU delegate (BYPASSING compatibility check)...")
+
+            // CRITICAL: Wrap delegate creation in try-catch
+            val gpuDelegate = try {
+                GpuDelegate()
+            } catch (e: Exception) {
+                log("GPU delegate creation failed immediately: ${e.message}")
+                throw Exception("GPU delegate not available: ${e.message}")
+            }
+
             delegate = gpuDelegate
-
             log("GPU delegate object created")
 
             val options = Interpreter.Options()
             options.addDelegate(gpuDelegate)
+            log("Adding GPU delegate to interpreter...")
 
-            log("Adding GPU delegate to interpreter options...")
+            interpreter = Interpreter(modelBuffer!!, options)
+            log("✓ GPU interpreter created successfully!")
 
-            interpreter = Interpreter(modelBuffer, options)
+            val avgTime = safeRunBenchmark()
+            log("GPU benchmark complete: ${avgTime}ms")
 
-            log("✓ GPU delegate created successfully!")
-            log("✓ Interpreter initialized with GPU")
-
-            val avgTime = runBenchmark()
-
-            log("✓ GPU: ${String.format("%.2f", avgTime)}ms avg")
-
-            // Verify it's actually using GPU (not CPU fallback)
+            // Verify actual GPU usage
             if (avgTime > 50f) {
-                log("⚠ Warning: GPU time seems slow, may be CPU fallback")
+                log("⚠ Warning: GPU time slow, may be CPU fallback")
+                BenchmarkResult(
+                    avgTime = avgTime,
+                    status = Status.WARNING,
+                    statusMessage = "Slow (may be CPU fallback)",
+                    threads = "GPU cores",
+                    note = "Inference time suggests CPU fallback"
+                )
             } else {
-                log("✓ GPU acceleration confirmed (fast inference time)")
+                log("✓ GPU acceleration confirmed")
+                BenchmarkResult(
+                    avgTime = avgTime,
+                    status = Status.WORKING,
+                    statusMessage = "WORKING ✓",
+                    threads = "GPU cores",
+                    note = ""
+                )
             }
 
-            BenchmarkResult(
-                avgTime = avgTime,
-                status = Status.WORKING,
-                statusMessage = "WORKING",
-                threads = "GPU cores",
-                note = ""
-            )
-
         } catch (e: Exception) {
-            log("✗ GPU failed: ${e.message}")
-            log("Stack trace: ${e.stackTraceToString()}")
+            log("GPU benchmark failed: ${e.message}")
+            log(e.stackTraceToString())
 
             BenchmarkResult(
                 avgTime = 0f,
                 status = Status.FAILED,
-                statusMessage = "GPU not supported on this device",
+                statusMessage = "NOT SUPPORTED",
                 threads = "",
                 note = e.message ?: "Unknown error"
             )
         } finally {
-            cleanup()
+            safeCleanup()
         }
     }
 
-    private fun benchmarkNPU(): BenchmarkResult {
+    private fun safeBenchmarkNPU(report: StringBuilder): BenchmarkResult {
         log("━━━ Benchmarking NPU (NNAPI) ━━━")
 
         return try {
+            if (modelBuffer == null) {
+                throw Exception("Model not loaded")
+            }
+
+            log("Creating NNAPI delegate...")
             val nnApiDelegate = NnApiDelegate()
             delegate = nnApiDelegate
-
             log("NNAPI delegate created")
 
             val options = Interpreter.Options()
             options.addDelegate(nnApiDelegate)
 
-            interpreter = Interpreter(modelBuffer, options)
-
+            interpreter = Interpreter(modelBuffer!!, options)
             log("NNAPI interpreter created")
 
-            val avgTime = runBenchmark()
+            val avgTime = safeRunBenchmark()
+            log("NPU benchmark complete: ${avgTime}ms")
 
-            log("✓ NPU (NNAPI): ${String.format("%.2f", avgTime)}ms avg")
-
-            // Check if actually accelerated
+            // Check if accelerated
             val isAccelerated = avgTime < 50f
 
             if (isAccelerated) {
-                log("✓ NPU acceleration detected (fast inference)")
                 BenchmarkResult(
                     avgTime = avgTime,
                     status = Status.WORKING,
@@ -291,215 +370,188 @@ class ModelBenchmark(private val context: Context) {
                     note = ""
                 )
             } else {
-                log("⚠ NPU delegates loads but using CPU fallback")
                 BenchmarkResult(
                     avgTime = avgTime,
                     status = Status.WARNING,
-                    statusMessage = "CPU fallback (not accelerated)",
+                    statusMessage = "CPU fallback",
                     threads = "Delegate loads but uses CPU",
                     note = "NNAPI is deprecated on Android 15+"
                 )
             }
 
         } catch (e: Exception) {
-            log("✗ NPU failed: ${e.message}")
+            log("NPU benchmark failed: ${e.message}")
+
             BenchmarkResult(
                 avgTime = 0f,
                 status = Status.FAILED,
-                statusMessage = e.message ?: "Unknown error",
+                statusMessage = "FAILED: ${e.message}",
                 threads = "",
                 note = ""
             )
         } finally {
-            cleanup()
+            safeCleanup()
         }
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // BENCHMARK EXECUTION
+    // SAFE BENCHMARK EXECUTION
     // ═══════════════════════════════════════════════════════════════
 
-    private fun runBenchmark(): Float {
-        log("Starting benchmark (${WARMUP_RUNS} warmup + ${BENCHMARK_RUNS} test runs)...")
+    private fun safeRunBenchmark(): Float {
+        try {
+            log("Starting benchmark (${WARMUP_RUNS} warmup + ${BENCHMARK_RUNS} test)...")
 
-        // Warm up
-        for (i in 0 until WARMUP_RUNS) {
-            interpreter?.run(input, output)
+            // Warm up
+            for (i in 0 until WARMUP_RUNS) {
+                interpreter?.run(input, output)
+            }
+            log("Warmup complete")
+
+            // Benchmark
+            val times = mutableListOf<Float>()
+            for (i in 0 until BENCHMARK_RUNS) {
+                val start = System.nanoTime()
+                interpreter?.run(input, output)
+                val elapsed = (System.nanoTime() - start) / 1_000_000f
+                times.add(elapsed)
+            }
+
+            val avgTime = times.average().toFloat()
+            log("Benchmark complete: avg=${String.format("%.2f", avgTime)}ms")
+
+            return avgTime
+
+        } catch (e: Exception) {
+            log("Benchmark execution failed: ${e.message}")
+            throw e
         }
+    }
 
-        log("Warmup complete, starting timed runs...")
+    // ═══════════════════════════════════════════════════════════════
+    // DEVICE INFORMATION
+    // ═══════════════════════════════════════════════════════════════
 
-        // Benchmark
-        val times = mutableListOf<Float>()
-        for (i in 0 until BENCHMARK_RUNS) {
-            val start = System.nanoTime()
-            interpreter?.run(input, output)
-            val elapsed = (System.nanoTime() - start) / 1_000_000f
-            times.add(elapsed)
+    private fun appendDeviceInfo(report: StringBuilder) {
+        try {
+            report.appendLine("DEVICE INFORMATION:")
+            report.appendLine("  Manufacturer: ${Build.MANUFACTURER}")
+            report.appendLine("  Model: ${Build.MODEL}")
+            report.appendLine("  Hardware: ${Build.HARDWARE}")
+            report.appendLine("  Android Version: ${Build.VERSION.SDK_INT}")
+            report.appendLine("  GPU: ${detectGPU()}")
+            report.appendLine()
+
+            val isQualcomm = Build.HARDWARE.contains("qcom", ignoreCase = true)
+            if (isQualcomm) {
+                report.appendLine("✓ Qualcomm Snapdragon detected")
+                report.appendLine("  Expected: Good GPU/NPU support")
+            }
+            report.appendLine()
+        } catch (e: Exception) {
+            report.appendLine("Error getting device info: ${e.message}")
+            report.appendLine()
         }
+    }
 
-        val avgTime = times.average().toFloat()
-        val minTime = times.minOrNull() ?: 0f
-        val maxTime = times.maxOrNull() ?: 0f
-
-        log("Benchmark complete: avg=${String.format("%.2f", avgTime)}ms, " +
-            "min=${String.format("%.2f", minTime)}ms, " +
-            "max=${String.format("%.2f", maxTime)}ms")
-
-        return avgTime
+    private fun detectGPU(): String {
+        return try {
+            when {
+                Build.HARDWARE.contains("qcom", ignoreCase = true) -> "Qualcomm Adreno"
+                Build.HARDWARE.contains("exynos", ignoreCase = true) -> "ARM Mali (Exynos)"
+                else -> "Unknown"
+            }
+        } catch (e: Exception) {
+            "Unknown"
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
     // REPORT FORMATTING
     // ═══════════════════════════════════════════════════════════════
 
-    private fun printResults(
-        report: StringBuilder,
-        results: Map<String, BenchmarkResult>
-    ) {
+    private fun printResults(report: StringBuilder, results: Map<String, BenchmarkResult>) {
         results.forEach { (backend, result) ->
             when (result.status) {
                 Status.WORKING -> {
                     report.appendLine("✓ $backend: ${String.format("%.2f", result.avgTime)}ms avg")
-                    report.appendLine("  Threads: ${result.threads}")
-                    report.appendLine("  Status: ${result.statusMessage}")
+                    report.appendLine("  ${result.threads}")
                     report.appendLine()
                 }
                 Status.FAILED -> {
                     report.appendLine("✗ $backend: FAILED")
-                    report.appendLine("  Error: ${result.statusMessage}")
+                    report.appendLine("  ${result.statusMessage}")
                     if (result.note.isNotEmpty()) {
-                        report.appendLine("  Details: ${result.note}")
+                        report.appendLine("  Note: ${result.note}")
                     }
-                    report.appendLine("  Status: NOT AVAILABLE")
                     report.appendLine()
                 }
                 Status.WARNING -> {
                     report.appendLine("▲ $backend: ${String.format("%.2f", result.avgTime)}ms avg")
-                    report.appendLine("  Backend: ${result.statusMessage}")
-                    report.appendLine("  Status: ${result.threads}")
-                    report.appendLine("  Note: ${result.note}")
+                    report.appendLine("  ${result.statusMessage}")
+                    report.appendLine("  ${result.note}")
                     report.appendLine()
                 }
             }
         }
     }
 
-    private fun printRecommendations(
-        report: StringBuilder,
-        results: Map<String, BenchmarkResult>
-    ) {
+    private fun printRecommendations(report: StringBuilder, results: Map<String, BenchmarkResult>) {
         report.appendLine("════════════════════════════════════════════════════════")
         report.appendLine("RECOMMENDATIONS")
         report.appendLine("════════════════════════════════════════════════════════")
         report.appendLine()
 
-        val bestBackend = results.filter { it.value.status == Status.WORKING }
-            .minByOrNull { it.value.avgTime }
-
-        if (bestBackend != null) {
-            report.appendLine("BEST OPTION: ${bestBackend.key}")
-            report.appendLine("Performance: ${String.format("%.2f", bestBackend.value.avgTime)}ms per inference")
-
-            val fps = 1000 / (bestBackend.value.avgTime * 2)
-            report.appendLine("Expected FPS for full pipeline: ${fps.toInt()} FPS")
-            report.appendLine()
-
-            report.appendLine("Implementation:")
-            when (bestBackend.key) {
-                "GPU" -> {
-                    report.appendLine("```kotlin")
-                    report.appendLine("val gpuDelegate = GpuDelegate()")
-                    report.appendLine("val options = Interpreter.Options().addDelegate(gpuDelegate)")
-                    report.appendLine("val interpreter = Interpreter(modelBuffer, options)")
-                    report.appendLine("```")
-                }
-                "NPU" -> {
-                    report.appendLine("```kotlin")
-                    report.appendLine("val nnApiDelegate = NnApiDelegate()")
-                    report.appendLine("val options = Interpreter.Options().addDelegate(nnApiDelegate)")
-                    report.appendLine("val interpreter = Interpreter(modelBuffer, options)")
-                    report.appendLine("```")
-                }
-                "CPU" -> {
-                    report.appendLine("```kotlin")
-                    report.appendLine("val options = Interpreter.Options()")
-                    report.appendLine("    .setNumThreads(4)")
-                    report.appendLine("    .setUseXNNPACK(true)")
-                    report.appendLine("val interpreter = Interpreter(modelBuffer, options)")
-                    report.appendLine("```")
-                }
-            }
+        val working = results.filter { it.value.status == Status.WORKING }
+        if (working.isEmpty()) {
+            report.appendLine("⚠ No hardware acceleration available")
+            report.appendLine("Consider using CPU with INT8 quantization for better performance")
         } else {
-            report.appendLine("⚠ Using CPU (no hardware acceleration available)")
-            report.appendLine()
-            report.appendLine("To improve CPU performance:")
-            report.appendLine("  • Quantize models to INT8 (2-4x faster)")
-            report.appendLine("  • Optimize preprocessing pipeline")
-            report.appendLine("  • Consider targeting Qualcomm devices (better acceleration)")
+            val best = working.minByOrNull { it.value.avgTime }!!
+            report.appendLine("BEST OPTION: ${best.key}")
+            report.appendLine("Performance: ${String.format("%.2f", best.value.avgTime)}ms per inference")
         }
         report.appendLine()
     }
 
-    private fun printSummary(
-        report: StringBuilder,
-        results: Map<String, BenchmarkResult>
-    ) {
+    private fun printSummary(report: StringBuilder, results: Map<String, BenchmarkResult>) {
         report.appendLine("════════════════════════════════════════════════════════")
-        report.appendLine("SUMMARY OF ALL OPTIONS:")
+        report.appendLine("SUMMARY")
         report.appendLine("════════════════════════════════════════════════════════")
         report.appendLine()
 
-        val cpuTime = results["CPU"]?.avgTime ?: 0f
         results.forEach { (backend, result) ->
-            if (result.status == Status.WORKING) {
-                val speedup = if (backend != "CPU" && cpuTime > 0) {
-                    cpuTime / result.avgTime
-                } else 1f
-
-                val speedupText = if (speedup > 1) {
-                    " ← ${String.format("%.0f", speedup)}x faster!"
-                } else ""
-
-                report.appendLine("$backend: ${String.format("%.2f", result.avgTime)}ms$speedupText")
-            } else {
-                report.appendLine("$backend: ${result.statusMessage}")
+            when (result.status) {
+                Status.WORKING, Status.WARNING ->
+                    report.appendLine("$backend: ${String.format("%.2f", result.avgTime)}ms")
+                Status.FAILED ->
+                    report.appendLine("$backend: ${result.statusMessage}")
             }
         }
         report.appendLine()
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // HELPER FUNCTIONS
+    // SAFE CLEANUP
     // ═══════════════════════════════════════════════════════════════
 
-    private fun checkGPUCompatibilityList(): Boolean {
-        return try {
-            val compatList = org.tensorflow.lite.gpu.CompatibilityList()
-            compatList.isDelegateSupportedOnThisDevice
+    private fun safeCleanup() {
+        try {
+            interpreter?.close()
+            interpreter = null
         } catch (e: Exception) {
-            false
+            log("Error closing interpreter: ${e.message}")
         }
-    }
 
-    private fun loadModelFile(): MappedByteBuffer {
-        val assetFileDescriptor = context.assets.openFd(MODEL_FILE)
-        val fileInputStream = FileInputStream(assetFileDescriptor.fileDescriptor)
-        val fileChannel = fileInputStream.channel
-        val startOffset = assetFileDescriptor.startOffset
-        val declaredLength = assetFileDescriptor.declaredLength
-        return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
-    }
-
-    private fun cleanup() {
-        interpreter?.close()
-        interpreter = null
-
-        when (delegate) {
-            is GpuDelegate -> (delegate as GpuDelegate).close()
-            is NnApiDelegate -> (delegate as NnApiDelegate).close()
+        try {
+            when (delegate) {
+                is GpuDelegate -> (delegate as GpuDelegate).close()
+                is NnApiDelegate -> (delegate as NnApiDelegate).close()
+            }
+            delegate = null
+        } catch (e: Exception) {
+            log("Error closing delegate: ${e.message}")
         }
-        delegate = null
     }
 
     private fun log(message: String) {
