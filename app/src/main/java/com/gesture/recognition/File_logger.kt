@@ -66,15 +66,24 @@ class FileLogger private constructor() {
          * Log INFO level message
          * CRASH-SAFE: Won't crash even if file write fails
          */
-        fun i(tag: String, message: String) {
+        fun i(tag: String, message: String, throwable: Throwable? = null) {
             try {
                 // Always log to Logcat
-                Log.i(tag, message)
+                if (throwable != null) {
+                    Log.i(tag, message, throwable)
+                } else {
+                    Log.i(tag, message)
+                }
 
                 // Try to log to file if initialized
                 if (initialized && logFile != null) {
                     val timestamp = getCurrentTime()
                     logFile?.appendText("[$timestamp] [$tag] $message\n")
+
+                    // Add stack trace if throwable provided
+                    if (throwable != null) {
+                        logFile?.appendText("${throwable.stackTraceToString()}\n")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "File write failed (non-fatal): ${e.message}")
@@ -85,12 +94,22 @@ class FileLogger private constructor() {
         /**
          * Log DEBUG level message
          */
-        fun d(tag: String, message: String) {
+        fun d(tag: String, message: String, throwable: Throwable? = null) {
             try {
-                Log.d(tag, message)
+                if (throwable != null) {
+                    Log.d(tag, message, throwable)
+                } else {
+                    Log.d(tag, message)
+                }
+
                 if (initialized && logFile != null) {
                     val timestamp = getCurrentTime()
                     logFile?.appendText("[$timestamp] [DEBUG] [$tag] $message\n")
+
+                    // Add stack trace if throwable provided
+                    if (throwable != null) {
+                        logFile?.appendText("${throwable.stackTraceToString()}\n")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "File write failed: ${e.message}")
@@ -100,12 +119,22 @@ class FileLogger private constructor() {
         /**
          * Log ERROR level message
          */
-        fun e(tag: String, message: String) {
+        fun e(tag: String, message: String, throwable: Throwable? = null) {
             try {
-                Log.e(tag, message)
+                if (throwable != null) {
+                    Log.e(tag, message, throwable)
+                } else {
+                    Log.e(tag, message)
+                }
+
                 if (initialized && logFile != null) {
                     val timestamp = getCurrentTime()
                     logFile?.appendText("[$timestamp] [ERROR] [$tag] $message\n")
+
+                    // Add stack trace if throwable provided
+                    if (throwable != null) {
+                        logFile?.appendText("${throwable.stackTraceToString()}\n")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "File write failed: ${e.message}")
