@@ -10,7 +10,7 @@ import java.nio.ByteBuffer
 
 /**
  * COMPREHENSIVE BENCHMARK - Tests CPU, GPU, and NPU on all devices
- * Based on official TensorFlow Lite and Qualcomm documentation
+ * FIXED: Uses simple GpuDelegate() API that works on TFLite 2.14.0
  */
 class ModelBenchmark(private val context: Context) {
 
@@ -284,7 +284,7 @@ class ModelBenchmark(private val context: Context) {
     }
 
     /**
-     * Test GPU performance using official pattern
+     * Test GPU performance - FIXED: Simple API for TFLite 2.14.0
      */
     private fun testGPU(): Float {
         FileLogger.i(TAG, "GPU: Checking compatibility...")
@@ -301,11 +301,11 @@ class ModelBenchmark(private val context: Context) {
             FileLogger.i(TAG, "GPU: Loading model...")
             val modelBuffer = loadModelFile("mediapipe_hand-handdetector.tflite")
 
-            FileLogger.i(TAG, "GPU: Creating GPU delegate with optimal settings...")
+            FileLogger.i(TAG, "GPU: Creating GPU delegate...")
 
-            // OFFICIAL PATTERN from TensorFlow documentation
-            val delegateOptions = compatList.bestOptionsForThisDevice
-            delegate = GpuDelegate(delegateOptions)
+            // FIXED: Use simple GpuDelegate() constructor
+            // This works on TFLite 2.14.0 without GpuDelegateFactory dependency
+            delegate = GpuDelegate()
 
             FileLogger.i(TAG, "GPU: Delegate created successfully")
 
@@ -440,9 +440,7 @@ class ModelBenchmark(private val context: Context) {
                 report.appendLine()
                 report.appendLine("Implementation:")
                 report.appendLine("```kotlin")
-                report.appendLine("val compatList = CompatibilityList()")
-                report.appendLine("val delegateOptions = compatList.bestOptionsForThisDevice")
-                report.appendLine("val gpuDelegate = GpuDelegate(delegateOptions)")
+                report.appendLine("val gpuDelegate = GpuDelegate()")
                 report.appendLine("val options = Interpreter.Options().addDelegate(gpuDelegate)")
                 report.appendLine("val interpreter = Interpreter(modelBuffer, options)")
                 report.appendLine("```")

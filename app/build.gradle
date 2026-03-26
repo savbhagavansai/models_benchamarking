@@ -9,15 +9,18 @@ android {
 
     defaultConfig {
         applicationId "com.gesture.recognition"
-        minSdk 28
+        minSdk 24
         targetSdk 34
         versionCode 1
-        versionName "1.0-benchmark"
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
             minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 
@@ -32,20 +35,41 @@ android {
 }
 
 dependencies {
-    // Core Android
-    implementation 'androidx.core:core-ktx:1.10.1'
-    implementation 'androidx.appcompat:appcompat:1.6.1'
+    // ═══════════════════════════════════════════════════════════════
+    // TENSORFLOW LITE - LATEST STABLE VERSIONS (2.16.1)
+    // Released April 2024 - Proven stable, better GPU support
+    // ═══════════════════════════════════════════════════════════════
 
-    // Coroutines (for BenchmarkActivity async execution)
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    // Core TensorFlow Lite library
+    implementation 'org.tensorflow:tensorflow-lite:2.16.1'
 
-    // ═══════════════════════════════════════════════════════════
-    // STANDALONE TENSORFLOW LITE (for NPU/GPU benchmarking)
-    // ═══════════════════════════════════════════════════════════
-    implementation 'org.tensorflow:tensorflow-lite:2.14.0'
-    implementation 'org.tensorflow:tensorflow-lite-gpu:2.14.0'
+    // GPU Delegate for hardware acceleration
+    implementation 'org.tensorflow:tensorflow-lite-gpu:2.16.1'
+
+    // Support library with utilities and data structures
     implementation 'org.tensorflow:tensorflow-lite-support:0.4.4'
 
-    // Note: NNAPI delegate is included in tensorflow-lite:2.14.0
-    // Note: We removed ONNX Runtime to keep APK small for benchmark-only
+    // ═══════════════════════════════════════════════════════════════
+    // ANDROID CORE LIBRARIES - LATEST STABLE
+    // ═══════════════════════════════════════════════════════════════
+
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+
+    // ═══════════════════════════════════════════════════════════════
+    // KOTLIN COROUTINES - LATEST STABLE
+    // ═══════════════════════════════════════════════════════════════
+
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3'
+
+    // ═══════════════════════════════════════════════════════════════
+    // TESTING LIBRARIES
+    // ═══════════════════════════════════════════════════════════════
+
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 }
