@@ -7,14 +7,12 @@ import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.GpuDelegate
 import org.tensorflow.lite.nnapi.NnApiDelegate
 import java.io.FileInputStream
-import java.nio.ByteBuffer
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 
 /**
- * CRASH-SAFE Model Benchmark with extensive error handling
- *
- * This version has multiple safety checks to prevent crashes
+ * CRASH-SAFE Model Benchmark with FileLogger support
+ * This version logs to BOTH Logcat AND debug_log.txt for CI/CD debugging
  */
 class ModelBenchmark(private val context: Context) {
 
@@ -22,8 +20,8 @@ class ModelBenchmark(private val context: Context) {
         private const val TAG = "ModelBenchmark"
         private const val MODEL_FILE = "mediapipe_hand-handdetector.tflite"
         private const val INPUT_SIZE = 192
-        private const val WARMUP_RUNS = 3  // Reduced to avoid crashes
-        private const val BENCHMARK_RUNS = 20  // Reduced to avoid crashes
+        private const val WARMUP_RUNS = 3
+        private const val BENCHMARK_RUNS = 20
     }
 
     private var interpreter: Interpreter? = null
@@ -35,24 +33,27 @@ class ModelBenchmark(private val context: Context) {
 
     private var modelBuffer: MappedByteBuffer? = null
 
-    // ═══════════════════════════════════════════════════════════════
-    // PUBLIC API - CRASH-SAFE BENCHMARK
-    // ═══════════════════════════════════════════════════════════════
+    init {
+        log("════════════════════════════════════════════════════════")
+        log("ModelBenchmark CONSTRUCTOR called")
+        log("Context package: ${context.packageName}")
+        log("════════════════════════════════════════════════════════")
+    }
 
     /**
      * Run comprehensive benchmark - CRASH SAFE VERSION
      */
     fun runComprehensiveBenchmark(): String {
-        log("═══════════════════════════════════════")
+        log("════════════════════════════════════════════════════════")
         log("Starting CRASH-SAFE benchmark...")
-        log("═══════════════════════════════════════")
+        log("════════════════════════════════════════════════════════")
 
         val report = StringBuilder()
 
         try {
             report.appendLine("════════════════════════════════════════════════════════")
             report.appendLine("COMPREHENSIVE MODEL ACCELERATION BENCHMARK")
-            report.appendLine("(CRASH-SAFE VERSION)")
+            report.appendLine("(CRASH-SAFE VERSION WITH FILELOGGER)")
             report.appendLine("════════════════════════════════════════════════════════")
             report.appendLine()
 
@@ -130,6 +131,7 @@ class ModelBenchmark(private val context: Context) {
             log(e.stackTraceToString())
         }
 
+        log("Benchmark completed, returning report")
         return report.toString()
     }
 
@@ -137,6 +139,7 @@ class ModelBenchmark(private val context: Context) {
      * COMPATIBILITY WRAPPER
      */
     fun runCompleteBenchmark(): String {
+        log("runCompleteBenchmark() called -> forwarding")
         return runComprehensiveBenchmark()
     }
 
@@ -554,8 +557,20 @@ class ModelBenchmark(private val context: Context) {
         }
     }
 
+    /**
+     * ENHANCED LOGGING - Logs to BOTH Logcat AND FileLogger
+     * This ensures logs appear in debug_log.txt for CI/CD debugging
+     */
     private fun log(message: String) {
+        // Always log to Logcat
         Log.d(TAG, message)
+
+        // Also log to FileLogger (for CI/CD)
+        try {
+            FileLogger.d(TAG, message)
+        } catch (e: Exception) {
+            // FileLogger might not be initialized, ignore
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
